@@ -1,0 +1,286 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>RomaAgent 本地控制台</title>
+    <link rel="stylesheet" href="/css/app.css"/>
+</head>
+<body>
+<div class="page">
+    <header class="hero">
+        <h1>RomaAgent 本地生成控制台</h1>
+        <p>在 localhost 上配置标题、想法和观点，一键触发多 Agent 写作流程。</p>
+    </header>
+
+    <form id="runForm" class="panel" method="post" action="/run" onsubmit="return false;" th:object="${request}">
+        <h2>内容输入</h2>
+        <div class="grid two">
+            <label>文章标题
+                <input type="text" th:field="*{title}" placeholder="例如：半导体产业发展剖析" required/>
+            </label>
+            <label>核心想法
+                <input type="text" th:field="*{idea}" placeholder="你希望解决的问题或主题" required/>
+            </label>
+        </div>
+        <label>你的观点主张
+            <textarea th:field="*{viewpoint}" rows="4" placeholder="例如：自主可控将重塑产业链价值分配"></textarea>
+        </label>
+
+        <h2>模型与检索参数</h2>
+        <div class="grid three">
+            <label>Provider
+                <input type="text" th:field="*{provider}"/>
+            </label>
+            <label>Runtime
+                <input type="text" th:field="*{runtime}"/>
+            </label>
+            <label>Model
+                <input type="text" th:field="*{model}"/>
+            </label>
+        </div>
+
+        <div class="grid two">
+            <label>OpenAI Base URL
+                <input type="text" th:field="*{openAiBaseUrl}" placeholder="https://open.bigmodel.cn/api/paas/v4"/>
+            </label>
+            <label>OpenAI API Key
+                <input type="password" th:field="*{openAiApiKey}" placeholder="可留空使用 .env"/>
+            </label>
+        </div>
+
+        <div class="grid three">
+            <label>Search Provider
+                <input type="text" th:field="*{searchProvider}"/>
+            </label>
+            <label>Tavily API Key
+                <input type="password" th:field="*{tavilyApiKey}" placeholder="可留空使用 .env"/>
+            </label>
+            <label>Max Sources
+                <input type="text" th:field="*{maxSources}"/>
+            </label>
+        </div>
+
+        <h2>审查打回策略</h2>
+        <div class="grid two">
+            <label>元老院2号打回分数线
+                <input type="text" th:field="*{senateRejectScoreThreshold}"/>
+            </label>
+            <label>最大重写轮次
+                <input type="text" th:field="*{senateMaxReworkRounds}"/>
+            </label>
+        </div>
+
+        <h2>字数设置</h2>
+        <div class="grid two">
+            <label>最小字数
+                <input type="text" th:field="*{articleMinWords}"/>
+            </label>
+            <label>最大字数
+                <input type="text" th:field="*{articleMaxWords}"/>
+            </label>
+        </div>
+
+        <button id="runButton" type="submit">开始生成</button>
+    </form>
+
+    <section id="resultPanel" class="panel" style="display:none" th:style="${result != null} ? 'display:block' : 'display:none'">
+        <h2>运行结果</h2>
+        <p><strong>状态：</strong><span id="statusText" th:text="${result != null ? (result.success ? '成功' : '失败') : '未开始'}">未开始</span></p>
+        <p><strong>Run ID：</strong><span id="runIdText" th:text="${result != null ? result.runId : ''}"></span></p>
+        <p id="errorRow" style="display:none" th:style="${result != null and result.error != null and !#strings.isEmpty(result.error)} ? 'display:block' : 'display:none'"><strong>错误：</strong><span id="errorText" th:text="${result != null ? result.error : ''}"></span></p>
+
+        <details open>
+            <summary>终端输出</summary>
+            <pre id="terminalOutput" th:text="${result != null ? result.output : ''}"></pre>
+        </details>
+
+        <details id="senateBriefBlock" style="display:none" th:style="${result != null and result.senateBrief != null and !#strings.isEmpty(result.senateBrief)} ? 'display:block' : 'display:none'">
+            <summary>元老院资料包</summary>
+            <pre id="senateBriefText" th:text="${result != null ? result.senateBrief : ''}"></pre>
+        </details>
+
+        <details id="tribuneReportBlock" style="display:none" th:style="${result != null and result.tribuneReport != null and !#strings.isEmpty(result.tribuneReport)} ? 'display:block' : 'display:none'">
+            <summary>保民官审查报告</summary>
+            <pre id="tribuneReportText" th:text="${result != null ? result.tribuneReport : ''}"></pre>
+        </details>
+
+        <details id="hexoBlock" style="display:none" th:style="${result != null and result.hexoMarkdown != null and !#strings.isEmpty(result.hexoMarkdown)} ? 'display:block' : 'display:none'">
+            <summary>Hexo 最终稿</summary>
+            <pre id="hexoText" th:text="${result != null ? result.hexoMarkdown : ''}"></pre>
+        </details>
+
+        <details id="zhihuBlock" style="display:none" th:style="${result != null and result.zhihuMarkdown != null and !#strings.isEmpty(result.zhihuMarkdown)} ? 'display:block' : 'display:none'">
+            <summary>知乎最终稿</summary>
+            <pre id="zhihuText" th:text="${result != null ? result.zhihuMarkdown : ''}"></pre>
+        </details>
+    </section>
+</div>
+<script>
+    const form = document.getElementById('runForm');
+    const runButton = document.getElementById('runButton');
+    const resultPanel = document.getElementById('resultPanel');
+    const statusText = document.getElementById('statusText');
+    const runIdText = document.getElementById('runIdText');
+    const errorRow = document.getElementById('errorRow');
+    const errorText = document.getElementById('errorText');
+    const terminalOutput = document.getElementById('terminalOutput');
+    const senateBriefBlock = document.getElementById('senateBriefBlock');
+    const tribuneReportBlock = document.getElementById('tribuneReportBlock');
+    const hexoBlock = document.getElementById('hexoBlock');
+    const zhihuBlock = document.getElementById('zhihuBlock');
+    const senateBriefText = document.getElementById('senateBriefText');
+    const tribuneReportText = document.getElementById('tribuneReportText');
+    const hexoText = document.getElementById('hexoText');
+    const zhihuText = document.getElementById('zhihuText');
+
+    let source = null;
+
+    function ensureResultPanel() {
+        if (!resultPanel) {
+            return;
+        }
+        resultPanel.style.display = 'block';
+    }
+
+    function appendTerminal(text) {
+        if (!terminalOutput) {
+            return;
+        }
+        terminalOutput.textContent += text;
+        terminalOutput.scrollTop = terminalOutput.scrollHeight;
+    }
+
+    function toggleBlock(block, value, textNode) {
+        if (!block || !textNode) {
+            return;
+        }
+        if (value && value.trim()) {
+            block.style.display = 'block';
+            textNode.textContent = value;
+        } else {
+            block.style.display = 'none';
+            textNode.textContent = '';
+        }
+    }
+
+    async function startRun(event) {
+        event.preventDefault();
+        if (source) {
+            source.close();
+            source = null;
+        }
+
+        ensureResultPanel();
+        statusText.textContent = '运行中';
+        runIdText.textContent = '';
+        if (errorRow) {
+            errorRow.style.display = 'none';
+        }
+        if (errorText) {
+            errorText.textContent = '';
+        }
+        if (terminalOutput) {
+            terminalOutput.textContent = '';
+        }
+        toggleBlock(senateBriefBlock, '', senateBriefText);
+        toggleBlock(tribuneReportBlock, '', tribuneReportText);
+        toggleBlock(hexoBlock, '', hexoText);
+        toggleBlock(zhihuBlock, '', zhihuText);
+
+        runButton.disabled = true;
+        runButton.textContent = '生成中...';
+
+        try {
+            const formData = new URLSearchParams(new FormData(form));
+            const prepResp = await fetch('/run/prepare', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+                },
+                body: formData
+            });
+
+            if (!prepResp.ok) {
+                throw new Error('准备运行失败');
+            }
+
+            const prepData = await prepResp.json();
+            const token = prepData.token;
+            source = new EventSource('/run/stream?token=' + encodeURIComponent(token));
+
+            source.addEventListener('status', (e) => {
+                appendTerminal('\n' + e.data + '\n');
+            });
+
+            source.addEventListener('chunk', (e) => {
+                appendTerminal(e.data);
+            });
+
+            source.addEventListener('result', (e) => {
+                const result = JSON.parse(e.data);
+                statusText.textContent = result.success ? '成功' : '失败';
+                runIdText.textContent = result.runId || '';
+                if (result.error) {
+                    if (errorRow) {
+                        errorRow.style.display = 'block';
+                    }
+                    if (errorText) {
+                        errorText.textContent = result.error;
+                    }
+                }
+                toggleBlock(senateBriefBlock, result.senateBrief || '', senateBriefText);
+                toggleBlock(tribuneReportBlock, result.tribuneReport || '', tribuneReportText);
+                toggleBlock(hexoBlock, result.hexoMarkdown || '', hexoText);
+                toggleBlock(zhihuBlock, result.zhihuMarkdown || '', zhihuText);
+                runButton.disabled = false;
+                runButton.textContent = '开始生成';
+                if (source) {
+                    source.close();
+                    source = null;
+                }
+            });
+
+            source.addEventListener('run_error', (e) => {
+                statusText.textContent = '失败';
+                if (errorRow) {
+                    errorRow.style.display = 'block';
+                }
+                if (errorText) {
+                    errorText.textContent = e.data || '运行失败';
+                }
+                runButton.disabled = false;
+                runButton.textContent = '开始生成';
+                if (source) {
+                    source.close();
+                    source = null;
+                }
+            });
+
+            source.onerror = () => {
+                if (statusText.textContent === '运行中') {
+                    statusText.textContent = '连接中断';
+                }
+                runButton.disabled = false;
+                runButton.textContent = '开始生成';
+            };
+        } catch (err) {
+            statusText.textContent = '失败';
+            if (errorRow) {
+                errorRow.style.display = 'block';
+            }
+            if (errorText) {
+                errorText.textContent = err.message || '提交失败';
+            }
+            runButton.disabled = false;
+            runButton.textContent = '开始生成';
+        }
+    }
+
+    if (form) {
+        form.addEventListener('submit', startRun);
+    }
+</script>
+</body>
+</html>
+
