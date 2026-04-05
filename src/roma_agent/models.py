@@ -26,13 +26,27 @@ class DraftPackage:
     outline: list[str]
     markdown: str
     citations: list[str] = field(default_factory=list)
+    image_plan: list[str] = field(default_factory=list)
+    image_prompt_specs: list["ImagePromptSpec"] = field(default_factory=list)
     images: list["ImageAsset"] = field(default_factory=list)
+
+
+@dataclass
+class ImagePromptSpec:
+    heading: str
+    image_id: str = ""
+    section: str = ""
+    alt_text: str = ""
+    prompt: str = ""
+    rationale: str = ""
 
 
 @dataclass
 class ImageAsset:
     alt_text: str
     prompt: str
+    image_id: str = ""
+    section: str = ""
     relative_path: str = ""
     source_url: str = ""
     status: str = "generated"

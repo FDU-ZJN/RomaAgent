@@ -153,3 +153,9 @@ class RomaPipeline:
             encoding="utf-8",
         )
 
+        image_prompt_specs_path = run_dir / "image_prompt_specs.json"
+        image_prompt_specs_path.write_text(
+            json.dumps([spec.__dict__ for spec in result.draft.image_prompt_specs], ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+

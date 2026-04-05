@@ -16,8 +16,8 @@ class PublisherAgent:
                 return "\n".join(lines[1:-1]).strip() + "\n"
         return markdown
 
-    def _image_markdown(self, draft: DraftPackage, platform: str) -> tuple[dict[str, list[str]], list[str]]:
-        by_heading: dict[str, list[str]] = {}
+    def _image_markdown(self, draft: DraftPackage, platform: str) -> tuple[dict[str, str], list[str]]:
+        by_id: dict[str, str] = {}
         unassigned: list[str] = []
         for item in draft.images:
             if item.status != "generated":
@@ -28,44 +28,39 @@ class PublisherAgent:
                 src = f"../{item.relative_path}" if platform == "hexo" else item.relative_path
             else:
                 continue
-
             md = f"![{item.alt_text}]({src})"
-            match = re.search(r"架构解释配图：(.+)$", item.alt_text)
-            if match:
-                heading = match.group(1).strip()
-                by_heading.setdefault(heading, []).append(md)
+            image_id = getattr(item, "image_id", "").strip()
+            if image_id:
+                by_id[image_id] = md
             else:
                 unassigned.append(md)
-        return by_heading, unassigned
+        return by_id, unassigned
 
     def _inject_images_into_markdown(self, markdown: str, draft: DraftPackage, platform: str) -> str:
         if not draft.images:
             return markdown
+        markdown = re.sub(r"!\[[^\]]*\]\([^\)]*\)", "", markdown)
+        markdown = re.sub(r"<img[^>]*>", "", markdown)
 
-        by_heading, unassigned = self._image_markdown(draft, platform)
-        if not by_heading and not unassigned:
+        by_id, unassigned = self._image_markdown(draft, platform)
+        if not by_id and not unassigned:
             return markdown
 
-        lines = markdown.splitlines()
-        output: list[str] = []
+        used_ids: set[str] = set()
 
-        for line in lines:
-            output.append(line)
-            stripped = line.strip()
-            if stripped.startswith("## "):
-                heading = stripped[3:].strip()
-                inserts = by_heading.pop(heading, [])
-                if inserts:
-                    output.append("")
-                    for idx, image_md in enumerate(inserts):
-                        output.append(image_md)
-                        if idx != len(inserts) - 1:
-                            output.append("")
-                    output.append("")
+        def _replace_placeholder(match: re.Match[str]) -> str:
+            image_id = match.group(1).strip()
+            image_md = by_id.get(image_id)
+            if not image_md:
+                return ""
+            used_ids.add(image_id)
+            return image_md
 
-        remaining = unassigned + [img for items in by_heading.values() for img in items]
+        merged = re.sub(r"\{\{IMAGE:([A-Za-z0-9_-]+)\}\}", _replace_placeholder, markdown)
+        merged = re.sub(r"\n{3,}", "\n\n", merged).strip() + "\n"
+
+        remaining = unassigned + [img for image_id, img in by_id.items() if image_id not in used_ids]
         if remaining:
-            merged = "\n".join(output)
             ref_match = re.search(r"\n##\s+参考资料\s*\n", merged)
             if ref_match:
                 insert_at = ref_match.start()
@@ -75,10 +70,11 @@ class PublisherAgent:
                 merged = merged.rstrip() + "\n\n" + "\n\n".join(remaining) + "\n"
             return merged
 
-        return "\n".join(output)
+        return merged
 
     def _cleanup_for_publish(self, markdown: str) -> str:
         markdown = self._strip_outer_code_fence(markdown)
+        markdown = re.sub(r"<!--\s*IMAGE_PROMPT\s*\{[\s\S]*?\}\s*-->", "", markdown)
         blocked_sections = {
             "元老院方案",
             "元老院质控意见",

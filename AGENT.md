@@ -313,3 +313,36 @@ which prevented real LLM scoring/writing execution in `ROMA_PROVIDER=agent_frame
 - Optional desired port via `ROMA_UI_PORT`.
 - Implemented in `java-ui/src/main/java/com/cosmos/ui/RomaUiApplication.java`.
 
+## 2026-04-05 - Two-Stage Image Prompt Planning
+
+### User Goal
+- Reduce gibberish/garbled images by separating image intent planning and concrete prompt authoring.
+- New ownership:
+	- Senate Agent 1: produce high-level image planning text only.
+	- Consul Agent 1: refine planning into concrete image-generation prompts (not shown in article body).
+	- Consul Agent 2 (Image Consul): consume refined prompts and generate images.
+
+### Implemented
+- Updated Senate brief section in `src/roma_agent/roman_roles.py`:
+	- from `### 图片位置建议（供图片执政官）`
+	- to `### 图片规划（供执政官1号细化）`
+- Extended draft metadata in `src/roma_agent/models.py`:
+	- `DraftPackage.image_plan`
+	- `DraftPackage.image_prompt_specs`
+	- new `ImagePromptSpec` dataclass
+- Added prompt-refinement stage in `src/roma_agent/writer.py`:
+	- Consul extracts Senate image plan
+	- Consul generates structured JSON prompt specs (`heading/alt_text/prompt/rationale`)
+	- fallback prompt specs are generated when JSON parse fails
+	- prompt specs are stored in draft metadata only, not injected into markdown body
+- Updated `src/roma_agent/roman_roles.py` image generation flow:
+	- `ImageConsulAgent` now prioritizes `draft.image_prompt_specs`
+	- keeps old section-based auto fallback when refined prompts are unavailable
+	- quality and tribune stages now preserve image planning metadata across draft rewrites
+- Added artifact persistence in `src/roma_agent/pipeline.py`:
+	- `image_prompt_specs.json`
+
+### Result
+- Image generation now follows a clearer Roman handoff chain and reduces direct heuristic prompting from raw article text.
+- Text output remains clean (no prompt-engineering traces in正文), while image prompts stay auditable in artifacts.
+

@@ -1,0 +1,5 @@
+标题: RomaAgent技术总览
+核心想法: 为RomaAgent 写一个技术宣传博客,要求关注文字描述和技术实现思路
+观点主张: 参考项目文档https://github.com/FDU-ZJN/RomaAgent/blob/main/PROJECT.md
+完整项目https://github.com/FDU-ZJN/RomaAgent
+进行技术总览编写
