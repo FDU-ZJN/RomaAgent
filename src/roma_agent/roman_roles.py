@@ -368,6 +368,8 @@ class ImageConsulAgent:
         "pipeline",
         "dependency",
     }
+    _CJK_PATTERN = re.compile(r"[\u4e00-\u9fff]")
+    _IMAGE_PLACEHOLDER_PATTERN = re.compile(r"\{\{IMAGE:([A-Za-z0-9_-]+)\}\}")
 
     def __init__(
         self,
@@ -387,6 +389,7 @@ class ImageConsulAgent:
 
         image_dir = run_dir / "images"
         prompts = self._build_image_prompts(draft, senate_design)
+        prompts = self._enrich_prompts_with_markdown_context(prompts, draft.markdown)
         prompts = self._quality_gate_prompt_specs(prompts, draft)
         assets: list[ImageAsset] = []
 
@@ -551,11 +554,10 @@ class ImageConsulAgent:
             if not isinstance(item, dict):
                 continue
             image_id = str(item.get("image_id", "")).strip()
-            heading = str(item.get("heading", "")).strip() or "Key Section"
-            section = str(item.get("section", "")).strip() or heading
+            heading = f"Key Section {len(specs) + 1}"
+            section = heading
             alt_text = str(item.get("alt_text", "")).strip() or f"Architecture diagram for {heading}"
             prompt = str(item.get("prompt", "")).strip()
-            rationale = str(item.get("rationale", "")).strip()
             if not prompt:
                 continue
             specs.append(
@@ -565,10 +567,82 @@ class ImageConsulAgent:
                     section=section,
                     alt_text=alt_text,
                     prompt=prompt,
-                    rationale=rationale,
                 )
             )
         return specs
+
+    def _enrich_prompts_with_markdown_context(self, specs: list[ImagePromptSpec], markdown: str) -> list[ImagePromptSpec]:
+        if not specs or not markdown:
+            return specs
+
+        context_by_id = self._build_placeholder_context(markdown)
+        enriched: list[ImagePromptSpec] = []
+        for spec in specs:
+            image_id = (spec.image_id or "").strip()
+            context = context_by_id.get(image_id)
+            heading = spec.heading.strip() or "Key Section"
+            alt_text = spec.alt_text.strip() or f"Architecture diagram for {heading}"
+            prompt = spec.prompt.strip()
+
+            if context:
+                heading = self._normalize_heading_for_prompt(heading, context["heading"])
+                if not alt_text or alt_text.lower().startswith("architecture diagram for key section"):
+                    alt_text = f"Architecture diagram for {heading}"
+
+                if self._needs_prompt_enrichment(prompt):
+                    prompt = self._compose_enriched_prompt(heading)
+
+            enriched.append(
+                ImagePromptSpec(
+                    heading=heading,
+                    image_id=spec.image_id,
+                    section=spec.section or heading,
+                    alt_text=alt_text,
+                    prompt=prompt,
+                    rationale=spec.rationale,
+                )
+            )
+        return enriched
+
+    def _build_placeholder_context(self, markdown: str) -> dict[str, dict[str, str]]:
+        context: dict[str, dict[str, str]] = {}
+        current_heading = "Key Section"
+        for line in markdown.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("## ") or stripped.startswith("### "):
+                current_heading = re.sub(r"^#{2,3}\s+", "", stripped).strip() or current_heading
+            placeholder_match = self._IMAGE_PLACEHOLDER_PATTERN.search(stripped)
+            if not placeholder_match:
+                continue
+            image_id = placeholder_match.group(1).strip()
+            if not image_id:
+                continue
+            context[image_id] = {"heading": current_heading}
+        return context
+
+    def _normalize_heading_for_prompt(self, current_heading: str, markdown_heading: str) -> str:
+        candidate = markdown_heading.strip() or current_heading
+        if self._CJK_PATTERN.search(candidate):
+            return "Target Section"
+        return candidate
+
+    def _needs_prompt_enrichment(self, prompt: str) -> bool:
+        if not prompt:
+            return True
+        word_count = len(re.findall(r"[A-Za-z0-9_-]+", prompt))
+        if word_count < 22:
+            return True
+        lower = prompt.lower()
+        coverage = sum(1 for token in self._STRUCTURE_HINTS if token in lower)
+        return coverage < 3
+
+    def _compose_enriched_prompt(self, heading: str) -> str:
+        return (
+            f"Generate a technical architecture diagram for '{heading}'. "
+            "Show module boundaries, data flow directions, dependency paths, layered interactions, and control points. "
+            "Use a clean engineering blueprint style with medium-high information density and clear visual hierarchy. "
+            "No readable text, no watermark, no brand logo."
+        )
 
     def _quality_gate_prompt_specs(self, specs: list[ImagePromptSpec], draft: DraftPackage) -> list[ImagePromptSpec]:
         if not specs:
@@ -673,12 +747,20 @@ class ImageConsulAgent:
     def _sanitize_prompt_spec(self, spec: ImagePromptSpec) -> ImagePromptSpec:
         prompt = spec.prompt.strip()
         prompt = re.sub(r"\s+", " ", prompt)
+        if self._CJK_PATTERN.search(prompt):
+            prompt = (
+                f"Generate an architecture-focused technical diagram for '{spec.heading or 'Key Section'}'. "
+                "Highlight modules, data flow, dependencies, and layered interactions. "
+                "No readable text, no watermark, no brand logo."
+            )
         # Enforce hard constraints for text-heavy artifacts.
         required_tail = "No readable text, no watermark, no brand logo."
         if required_tail.lower() not in prompt.lower():
             prompt = prompt.rstrip(".") + ". " + required_tail
 
         alt_text = spec.alt_text.strip() or f"Architecture diagram for {spec.heading.strip() or 'key section'}"
+        if self._CJK_PATTERN.search(alt_text):
+            alt_text = f"Architecture diagram for {spec.heading.strip() or 'key section'}"
         if len(alt_text) > 64:
             alt_text = alt_text[:64]
         return ImagePromptSpec(

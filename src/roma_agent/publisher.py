@@ -7,6 +7,12 @@ from .models import DraftPackage, PlatformArticle
 
 
 class PublisherAgent:
+    IMAGE_PLACEHOLDER_PATTERN = re.compile(r"\{\{IMAGE:([A-Za-z0-9_-]+)\}\}")
+    IMAGE_PLACEHOLDER_IN_MARKDOWN_IMAGE_PATTERN = re.compile(
+        r"!\[\s*\{\{IMAGE:([A-Za-z0-9_-]+)\}\}\s*\]\([^\)]*\)",
+        re.IGNORECASE,
+    )
+
     def _strip_outer_code_fence(self, markdown: str) -> str:
         text = markdown.strip()
         # Remove whole-document fenced wrapper like ```markdown ... ```
@@ -39,6 +45,13 @@ class PublisherAgent:
     def _inject_images_into_markdown(self, markdown: str, draft: DraftPackage, platform: str) -> str:
         if not draft.images:
             return markdown
+
+        # Normalize model outputs like ![{{IMAGE:img_1}}](#) to raw placeholders
+        # so placeholders are not removed by generic image markdown cleanup.
+        markdown = self.IMAGE_PLACEHOLDER_IN_MARKDOWN_IMAGE_PATTERN.sub(
+            lambda m: "{{IMAGE:" + m.group(1) + "}}",
+            markdown,
+        )
         markdown = re.sub(r"!\[[^\]]*\]\([^\)]*\)", "", markdown)
         markdown = re.sub(r"<img[^>]*>", "", markdown)
 
@@ -56,7 +69,7 @@ class PublisherAgent:
             used_ids.add(image_id)
             return image_md
 
-        merged = re.sub(r"\{\{IMAGE:([A-Za-z0-9_-]+)\}\}", _replace_placeholder, markdown)
+        merged = self.IMAGE_PLACEHOLDER_PATTERN.sub(_replace_placeholder, markdown)
         merged = re.sub(r"\n{3,}", "\n\n", merged).strip() + "\n"
 
         remaining = unassigned + [img for image_id, img in by_id.items() if image_id not in used_ids]

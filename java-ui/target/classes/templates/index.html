@@ -50,6 +50,27 @@
         </div>
 
         <div class="grid three">
+            <label>OpenAI Timeout Seconds
+                <input type="text" th:field="*{openAiTimeoutSeconds}"/>
+            </label>
+            <label>OpenAI Max Retries
+                <input type="text" th:field="*{openAiMaxRetries}"/>
+            </label>
+            <label>OpenAI Retry Backoff Seconds
+                <input type="text" th:field="*{openAiRetryBackoffSeconds}"/>
+            </label>
+        </div>
+
+        <div class="grid two">
+            <label>OpenAI Max Tokens
+                <input type="text" th:field="*{openAiMaxTokens}"/>
+            </label>
+            <label>OpenAI Thinking Type
+                <input type="text" th:field="*{openAiThinkingType}"/>
+            </label>
+        </div>
+
+        <div class="grid three">
             <label>Search Provider
                 <input type="text" th:field="*{searchProvider}"/>
             </label>
@@ -58,6 +79,37 @@
             </label>
             <label>Max Sources
                 <input type="text" th:field="*{maxSources}"/>
+            </label>
+        </div>
+
+        <h2>输出与图片参数</h2>
+        <div class="grid three">
+            <label>Output Dir
+                <input type="text" th:field="*{outputDir}"/>
+            </label>
+            <label>Enable Image Consul
+                <input type="text" th:field="*{enableImageConsul}"/>
+            </label>
+            <label>Image Model
+                <input type="text" th:field="*{imageModel}"/>
+            </label>
+        </div>
+
+        <div class="grid three">
+            <label>Image Count
+                <input type="text" th:field="*{imageCount}"/>
+            </label>
+            <label>Image Size
+                <input type="text" th:field="*{imageSize}"/>
+            </label>
+            <label>Image Poll Interval Seconds
+                <input type="text" th:field="*{imagePollIntervalSeconds}"/>
+            </label>
+        </div>
+
+        <div class="grid two">
+            <label>Image Poll Timeout Seconds
+                <input type="text" th:field="*{imagePollTimeoutSeconds}"/>
             </label>
         </div>
 

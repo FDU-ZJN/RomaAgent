@@ -36,10 +36,7 @@ class WriterAgent:
         if not image_prompt_specs:
             image_prompt_specs = self._build_image_prompt_specs(
                 title=title,
-                idea=research.idea,
-                senate_brief=senate_brief,
                 image_plan=image_plan,
-                markdown=markdown,
             )
         image_prompt_specs = self._assign_image_ids(image_prompt_specs)
         markdown = self._inject_image_placeholders(markdown, image_prompt_specs)
@@ -80,25 +77,21 @@ class WriterAgent:
         key_points = "\n".join(f"- {p}" for p in research.key_points)
 
         system_prompt = (
-            "你是一位资深中文作者，擅长写有观点、有画面感、有节奏的长文。"
-            "请产出可直接发布的中文 Markdown 正文。"
-            "正文禁止插入任何图片 markdown（如 ![](...)）或 <img> 标签，图片由后续流程自动插入。"
-            "请在正文里直接给出图片占位符和图片prompt注释。"
-            "占位符格式：{{IMAGE:img_x}}。"
-            "图片prompt注释格式：<!-- IMAGE_PROMPT {\"image_id\":\"img_x\",\"heading\":\"...\",\"section\":\"...\",\"alt_text\":\"...\",\"prompt\":\"...\",\"rationale\":\"...\"} -->。"
-            "IMAGE_PROMPT JSON 各字段值必须是英文。"
+            "你是中文技术作者。输出可发布 Markdown 正文。"
+            "正文中可插入 {{IMAGE:img_x}}。禁止输出 ![](...) 或 <img>。"
+            "每个占位符后紧跟注释：<!-- IMAGE_PROMPT {\"image_id\":\"img_x\",\"alt_text\":\"...\",\"prompt\":\"...\"} -->。"
+            "IMAGE_PROMPT 的 alt_text/prompt 必须是英文。"
+            "prompt 需包含 architecture/modules/data flow/interactions 中至少三类信息，长度建议 25-80 英文词。"
+            "不要写过短口号式 prompt。"
         )
         user_prompt = (
             f"题目：{title}\n"
             f"选题：{research.idea}\n\n"
-            "写作要求：\n"
-            "1) 正文必须拆分为 6-8 个 `##` 二级章节，章节之间逻辑递进。\n"
-            "2) 避免出现“Hexo 与知乎的平台适配要点”“落地建议与下一步”“调研关键要点”这类机械标题。\n"
-            "3) 保持观点鲜明，包含行业判断、案例感、方法论和可执行建议。\n"
-            f"4) 长度约 {self.min_words}-{self.max_words} 字。\n"
-            "5) 输出格式：仅 Markdown 正文；最后单独保留“## 参考资料”章节。\n\n"
-            "6) 在需要插图的位置插入 {{IMAGE:img_x}}，并紧接着给出对应 IMAGE_PROMPT 注释。\n"
-            "7) 不要输出 JSON 包裹正文，直接输出 Markdown。\n\n"
+            "要求：\n"
+            "1) 6-8 个 `##` 章节，逻辑递进。\n"
+            f"2) 字数约 {self.min_words}-{self.max_words}。\n"
+            "3) 最后包含“## 参考资料”。\n"
+            "4) 需要配图处插入占位符并给 IMAGE_PROMPT 注释。\n\n"
             f"元老院资料包与大纲：\n{senate_brief}\n\n"
             f"元老院2号打回修改意见（如有）：\n{rewrite_feedback or '无'}\n\n"
             f"调研来源摘要：\n{source_notes}\n\n"
@@ -184,29 +177,25 @@ class WriterAgent:
     def _build_image_prompt_specs(
         self,
         title: str,
-        idea: str,
-        senate_brief: str,
         image_plan: list[str],
-        markdown: str,
     ) -> list[ImagePromptSpec]:
         # Fallback only: when embedded IMAGE_PROMPT comments are missing.
         if not image_plan:
             return [
                 ImagePromptSpec(
-                    heading="Overall Architecture",
+                    heading="Key Section 1",
                     image_id="img_1",
-                    section="Overall Architecture",
+                    section="Key Section 1",
                     alt_text=f"Architecture diagram for {title}",
                     prompt=(
                         f"Generate a system architecture diagram for the topic '{title}', highlighting module boundaries, data flows, and component interactions. Style: engineering blueprint, no readable text, no watermark, no brand logo."
                     ),
-                    rationale="Fallback when no image plan is available.",
                 )
             ]
 
         fallback_specs: list[ImagePromptSpec] = []
         for idx, item in enumerate(image_plan, start=1):
-            heading = self._extract_heading_from_plan(item)
+            heading = f"Key Section {idx}"
             fallback_specs.append(
                 ImagePromptSpec(
                     heading=heading,
@@ -216,7 +205,6 @@ class WriterAgent:
                     prompt=(
                         f"Generate a technical diagram for the section '{heading}', focusing on module relationships, data flows, and engineering mechanisms. Style: concise, professional, high information density; no readable text, no watermark, no brand logo."
                     ),
-                    rationale=item,
                 )
             )
         return fallback_specs
@@ -232,11 +220,10 @@ class WriterAgent:
             if not isinstance(item, dict):
                 continue
             image_id = str(item.get("image_id", "")).strip()
-            heading = str(item.get("heading", "")).strip() or "Key Section"
-            section = str(item.get("section", "")).strip() or heading
+            heading = f"Key Section {len(specs) + 1}"
+            section = heading
             alt_text = str(item.get("alt_text", "")).strip() or f"Architecture diagram for {heading}"
             prompt = str(item.get("prompt", "")).strip()
-            rationale = str(item.get("rationale", "")).strip()
             if not prompt:
                 continue
             specs.append(
@@ -246,7 +233,6 @@ class WriterAgent:
                     section=section,
                     alt_text=alt_text,
                     prompt=prompt,
-                    rationale=rationale,
                 )
             )
         return specs
@@ -270,11 +256,8 @@ class WriterAgent:
                 continue
             payload = {
                 "image_id": spec.image_id,
-                "heading": spec.heading,
-                "section": spec.section,
                 "alt_text": spec.alt_text,
                 "prompt": spec.prompt,
-                "rationale": spec.rationale,
             }
             additions.append(f"{{{{IMAGE:{spec.image_id}}}}}\n<!-- IMAGE_PROMPT {json.dumps(payload, ensure_ascii=False)} -->")
 
