@@ -346,3 +346,53 @@ which prevented real LLM scoring/writing execution in `ROMA_PROVIDER=agent_frame
 - Image generation now follows a clearer Roman handoff chain and reduces direct heuristic prompting from raw article text.
 - Text output remains clean (no prompt-engineering traces in正文), while image prompts stay auditable in artifacts.
 
+## 2026-04-06 - Python UI Packaging Hardening & Release Prep
+
+### User Goal
+- Deliver a distributable Windows EXE that:
+	- starts reliably without local Python setup
+	- supports custom localhost port via `-p`
+	- provides visible terminal output for runtime debugging
+
+### Runtime/Launcher Improvements
+- Updated `python-ui/launcher.py` to support CLI port override:
+	- `RomaAgentPythonUI.exe -p 3000`
+- Added robust Streamlit startup compatibility across versions:
+	- handled differing `bootstrap.run(...)` signatures
+	- avoided `command_line`/`is_hello` mismatch failures
+- Resolved Streamlit config conflict:
+	- forced `global.developmentMode=false` to allow custom `server.port`
+
+### Packaging Stability Fixes
+- Standardized build flow in `python-ui/build_exe.ps1` to use target conda env activation:
+	- `cmd /c "call conda activate roma-agent & ..."`
+- Fixed `.pth` startup crash in conda env under non-ASCII path:
+	- removed stale editable `.pth` before build
+	- used non-editable reinstall for packaging step
+- Ensured runtime dependencies are actually installed during build:
+	- removed `--no-deps` from package reinstall command
+
+### PyInstaller Inclusion Fixes
+- Updated `python-ui/roma_agent_ui.spec` to include missing dynamic imports and metadata:
+	- Streamlit internals (including `streamlit.runtime.scriptrunner.magic_funcs`)
+	- Agent Framework modules (`agent_framework`, `agent_framework.openai`, `agent_framework.foundry`)
+	- `collect_submodules("agent_framework")`
+	- metadata/data copy entries for Streamlit and Agent Framework
+- Switched executable to console mode for debugging:
+	- `console=True` (uses `run.exe`) so exceptions are visible when double-click launching
+
+### Validation Summary
+- Rebuilt EXE successfully in `roma-agent` environment.
+- Verified runtime launch with custom port:
+	- EXE started and served at `http://127.0.0.1:3000` when using `-p 3000`.
+- Confirmed previous blocker (`agent-framework is not installed`) no longer reproduced after dependency and hiddenimport fixes.
+
+### Git Release Hygiene
+- Addressed push rejection due to oversized artifacts accidentally committed:
+	- `dist/RomaAgentPythonUI.exe`
+	- `build/roma_agent_ui/RomaAgentPythonUI.pkg`
+- Added/confirmed ignore rules for generated artifacts:
+	- `dist/`
+	- `build/`
+
+
