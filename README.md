@@ -129,6 +129,46 @@ roma-agent --idea-file .\\README.md
 
 Java UI 详细说明见 [java-ui/README.md](java-ui/README.md)。
 
+## Python UI
+
+Python UI 详细说明见 [python-ui/README.md](python-ui/README.md)。
+
+## Python UI EXE 使用与打包说明
+
+### 运行 EXE
+
+- 产物路径：`dist/RomaAgentPythonUI.exe`
+- 支持端口参数：`-p` / `--port`
+
+示例：
+
+```bash
+dist\RomaAgentPythonUI.exe -p 3000
+```
+
+成功启动后可访问：
+
+```text
+http://127.0.0.1:3000
+```
+
+### 打包命令（Windows）
+
+```bash
+powershell -ExecutionPolicy Bypass -File python-ui/build_exe.ps1
+```
+
+说明：
+
+- 打包脚本使用 `cmd + conda activate roma-agent` 固定构建环境，避免多 Python 环境漂移。
+- EXE 运行时不要求用户激活 conda；但打包阶段必须使用正确环境，才能冻结正确依赖版本。
+
+### 常见问题与处理
+
+- `agent-framework is not installed`：已在打包链路中修复（安装项目依赖 + 显式收集 `agent_framework` 动态导入模块）。
+- `server.port does not work when global.developmentMode is true`：已在 `launcher.py` 关闭 development mode，并允许 `-p` 覆盖端口。
+- 双击无反应难排查：当前 EXE 已开启控制台输出（debug 友好），可直接看到 traceback。
+
 ## 项目结构
 
 ```text

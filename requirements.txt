@@ -4,3 +4,4 @@ rich>=13.7.1
 agent-framework>=1.0.0rc0
 requests>=2.32.0
 azure-identity>=1.17.1
+streamlit>=1.37.0
