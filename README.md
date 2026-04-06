@@ -195,8 +195,10 @@ examples/
 AGENT.md
 ```
 ## UI
+网页UI界面
 ![alt text](docs/images/ui-overview-1.png)
 ![alt text](docs/images/ui-overview-2.png)
+终端运行exe界面
 ![alt text](docs/images/ui-overview-3.png)
 下面是该项目生成的博客demo
 ---
